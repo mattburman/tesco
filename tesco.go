@@ -4,10 +4,14 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"regexp"
 )
 
 var productf string = "https://www.tesco.com/groceries/en-GB/products/%v"
+var dataRegexp *regexp.Regexp = regexp.MustCompile(`data-redux-state="(\[.*\])"`)
 
 func main() {
 	var productID int64
@@ -29,7 +33,20 @@ func getProduct(id int64) (string, error) {
 
 	productURL := fmt.Sprintf(productf, id)
 
-	// resp, err := http.Get("")
+	resp, err := http.Get(productURL)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
 
-	return productURL, nil
+	matches := dataRegexp.FindStringSubmatch(string(body))
+
+	if len(matches) < 2 {
+		return "", fmt.Errorf("getProduct: failed to extract data for %v", id)
+	}
+
+	data := matches[1]
+
+	return data, nil
 }
