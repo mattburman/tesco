@@ -2,8 +2,10 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -11,7 +13,7 @@ import (
 )
 
 var productf string = "https://www.tesco.com/groceries/en-GB/products/%v"
-var dataRegexp *regexp.Regexp = regexp.MustCompile(`data-redux-state="(\[.*\])"`)
+var dataRegexp *regexp.Regexp = regexp.MustCompile(`data-props="({.*})"`)
 
 func main() {
 	var productID int64
@@ -46,7 +48,16 @@ func getProduct(id int64) (string, error) {
 		return "", fmt.Errorf("getProduct: failed to extract data for %v", id)
 	}
 
-	data := matches[1]
+	jsonString := html.UnescapeString(matches[1])
+	var jsonMap map[string]interface{}
 
-	return data, nil
+	json.Unmarshal([]byte(jsonString), &jsonMap)
+
+	b, err := json.MarshalIndent(jsonMap, "", "  ")
+	if err != nil {
+		fmt.Println("error:", err)
+	}
+	fmt.Print(string(b))
+
+	return jsonString, nil
 }
