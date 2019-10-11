@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"sort"
 
+	"github.com/mattburman/mappp"
 	"github.com/urfave/cli"
 )
 
@@ -271,7 +272,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				url := c.String("pid")
+				url := c.String("url")
 
 				data, err := getCategory(url)
 				if err != nil {
@@ -333,6 +334,26 @@ func extractResources(resp *http.Response) (map[string]map[string]interface{}, e
 // getCategory takes a tesco category page and returns the data
 // or an error for parameter, network or request failures
 func getCategory(url string) (string, error) {
+	var data string
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return data, err
+	}
+	defer resp.Body.Close()
+
+	resources, err := extractResources(resp)
+	if err != nil {
+		return data, fmt.Errorf("getCategory: Unable to extract resources for url: %v", url)
+	}
+
+	productsByCategory, ok := resources["productsByCategory"]
+	if !ok {
+		return data, fmt.Errorf("getCategory: Unable to access productsByCategory for url: %v", url)
+	}
+
+	mappp.Pp(productsByCategory)
+
 	return "", nil
 }
 
@@ -354,6 +375,9 @@ func getProduct(id int64) (ProductData, error) {
 	defer resp.Body.Close()
 
 	resources, err := extractResources(resp)
+	if err != nil {
+		return data, fmt.Errorf("getProduct: Unable to extract resources for pid: %v", id)
+	}
 
 	productDetails, ok := resources["productDetails"]
 	if !ok {
