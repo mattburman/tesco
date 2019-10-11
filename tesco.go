@@ -4,13 +4,16 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"html"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
+	"sort"
+
+	"github.com/urfave/cli"
 )
 
 type ProductData struct {
@@ -221,15 +224,78 @@ type ProductData struct {
 var productf string = "https://www.tesco.com/groceries/en-GB/products/%v"
 var dataRegexp *regexp.Regexp = regexp.MustCompile(`data-props="({.*})"`)
 
+var invalidProductIDf string = "%v is an invalid productID"
+
 func main() {
-	var productID int64
-	flag.Int64Var(&productID, "pid", 0, productf)
-	flag.Parse()
-	res, err := getProduct(productID)
+	app := cli.NewApp()
+
+	app.Name = "tesco"
+	app.Usage = "query the tesco site"
+
+	app.Commands = []cli.Command{
+		{
+			Name:    "product",
+			Aliases: []string{"p"},
+			Usage:   "get product by product ID",
+			Flags: []cli.Flag{
+				cli.Int64Flag{
+					Name:     "pid",
+					Usage:    "Product ID of the product",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				pid := c.Int64("pid")
+				if pid < 100000000 {
+					return fmt.Errorf(invalidProductIDf, pid)
+				}
+
+				data, err := getProduct(pid)
+				if err != nil {
+					return err
+				}
+				fmt.Println(data)
+
+				return nil
+			},
+		},
+		{
+			Name:    "category",
+			Aliases: []string{"c"},
+			Usage:   "get category data by url",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:     "url",
+					Usage:    "A category URL",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				url := c.String("pid")
+
+				data, err := getCategory(url)
+				if err != nil {
+					return err
+				}
+				fmt.Println(data)
+
+				return nil
+			},
+		},
+	}
+
+	app.OnUsageError = func(c *cli.Context, err error, isSubcommand bool) error {
+		cli.ShowCommandHelp(c, c.Command.Name)
+		return nil
+	}
+
+	sort.Sort(cli.FlagsByName(app.Flags))
+	sort.Sort(cli.CommandsByName(app.Commands))
+
+	err := app.Run(os.Args)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(res)
 }
 
 func extractResources(resp *http.Response) (map[string]map[string]interface{}, error) {
@@ -264,22 +330,28 @@ func extractResources(resp *http.Response) (map[string]map[string]interface{}, e
 	return resourceMap, nil
 }
 
+// getCategory takes a tesco category page and returns the data
+// or an error for parameter, network or request failures
+func getCategory(url string) (string, error) {
+	return "", nil
+}
+
 // getProduct returns the product data
 // or an error for parameter, network or request failures
 func getProduct(id int64) (ProductData, error) {
 	var data ProductData
 
 	if id < 100000000 {
-		return data, fmt.Errorf("getProduct: %v is an invalid productID", id)
+		return data, fmt.Errorf(invalidProductIDf, id)
 	}
 
 	productURL := fmt.Sprintf(productf, id)
 
 	resp, err := http.Get(productURL)
-	defer resp.Body.Close()
 	if err != nil {
 		return data, err
 	}
+	defer resp.Body.Close()
 
 	resources, err := extractResources(resp)
 
