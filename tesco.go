@@ -3,6 +3,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"html"
@@ -231,6 +232,38 @@ func main() {
 	fmt.Println(res)
 }
 
+func extractResources(resp *http.Response) (map[string]map[string]interface{}, error) {
+	var resourceMap map[string]map[string]interface{}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return resourceMap, fmt.Errorf("Network error")
+	}
+
+	matches := dataRegexp.FindStringSubmatch(string(body))
+
+	if len(matches) < 2 {
+		return resourceMap, fmt.Errorf("Failed to extract data")
+	}
+
+	jsonString := html.UnescapeString(matches[1])
+	var jsonMap map[string]map[string]map[string]interface{}
+
+	json.Unmarshal([]byte(jsonString), &jsonMap)
+
+	_, errPresent := jsonMap["error"]
+	if errPresent {
+		return resourceMap, errors.New("Error returned from Tesco")
+	}
+
+	resourceMap, ok := jsonMap["resources"]
+	if !ok {
+		return resourceMap, errors.New("Unable to access resources")
+	}
+
+	return resourceMap, nil
+}
+
 // getProduct returns the product data
 // or an error for parameter, network or request failures
 func getProduct(id int64) (ProductData, error) {
@@ -243,32 +276,12 @@ func getProduct(id int64) (ProductData, error) {
 	productURL := fmt.Sprintf(productf, id)
 
 	resp, err := http.Get(productURL)
+	defer resp.Body.Close()
 	if err != nil {
 		return data, err
 	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
 
-	matches := dataRegexp.FindStringSubmatch(string(body))
-
-	if len(matches) < 2 {
-		return data, fmt.Errorf("getProduct: failed to extract data for pid: %v", id)
-	}
-
-	jsonString := html.UnescapeString(matches[1])
-	var jsonMap map[string]map[string]map[string]interface{}
-
-	json.Unmarshal([]byte(jsonString), &jsonMap)
-
-	_, errPresent := jsonMap["error"]
-	if errPresent {
-		return data, fmt.Errorf("getProduct: error returned from Tesco for pid: %v", id)
-	}
-
-	resources, ok := jsonMap["resources"]
-	if !ok {
-		return data, fmt.Errorf("getProduct: Unable to access resources for pid: %v", id)
-	}
+	resources, err := extractResources(resp)
 
 	productDetails, ok := resources["productDetails"]
 	if !ok {
