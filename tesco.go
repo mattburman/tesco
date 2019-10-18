@@ -70,9 +70,13 @@ func main() {
 
 				data, err := getCategory(url)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to get category: %v", err)
 				}
-				fmt.Println(*data)
+				productIDs, err := categoryToProductIDs(data)
+				if err != nil {
+					return fmt.Errorf("failed to extract products from category")
+				}
+				fmt.Println(productIDs)
 
 				return nil
 			},
@@ -112,6 +116,26 @@ func extractResources(body string) (*string, error) {
 	resources := gjson.Get(json, "resources").String()
 
 	return &resources, nil
+}
+
+// categoryToProductIDs takes a tesco category JSON string and returns extracted product IDs
+func categoryToProductIDs(category *string) (*[]string, error) {
+	fmt.Println(*category)
+
+	ids := gjson.Get(*category, "results.productItems.#.product.id")
+	if !ids.Exists() {
+		return nil, fmt.Errorf("unable to extract product ids from category")
+	}
+
+	idCount := gjson.Get(ids.String(), "#")
+	idSlice := make([]string, idCount.Int())
+
+	ids.ForEach(func(key, value gjson.Result) bool {
+		idSlice = append(idSlice, value.String())
+		return true
+	})
+
+	return &idSlice, nil
 }
 
 // getCategory takes a tesco category page and returns the data
