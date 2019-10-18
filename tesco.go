@@ -64,9 +64,15 @@ func main() {
 					Usage:    "A category URL",
 					Required: true,
 				},
+				cli.IntFlag{
+					Name:  "concurrency",
+					Usage: "Concurrent number of GET requests",
+					Value: 1,
+				},
 			},
 			Action: func(c *cli.Context) error {
 				url := c.String("url")
+				concurrency := c.Int("concurrency")
 
 				data, err := getCategory(url)
 				if err != nil {
@@ -77,6 +83,7 @@ func main() {
 					return fmt.Errorf("failed to extract products from category")
 				}
 				fmt.Println(productIDs)
+				fmt.Println(concurrency)
 
 				return nil
 			},
@@ -120,8 +127,6 @@ func extractResources(body string) (*string, error) {
 
 // categoryToProductIDs takes a tesco category JSON string and returns extracted product IDs
 func categoryToProductIDs(category *string) (*[]string, error) {
-	fmt.Println(*category)
-
 	ids := gjson.Get(*category, "results.productItems.#.product.id")
 	if !ids.Exists() {
 		return nil, fmt.Errorf("unable to extract product ids from category")
