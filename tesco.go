@@ -278,7 +278,7 @@ func main() {
 				if err != nil {
 					return err
 				}
-				fmt.Println(data)
+				fmt.Println(&data)
 
 				return nil
 			},
@@ -299,18 +299,18 @@ func main() {
 	}
 }
 
-func extractResources(resp *http.Response) (map[string]map[string]interface{}, error) {
+func extractResources(resp *http.Response) (*map[string]map[string]interface{}, error) {
 	var resourceMap map[string]map[string]interface{}
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return resourceMap, fmt.Errorf("Network error")
+		return nil, fmt.Errorf("request error: %v", err)
 	}
 
 	matches := dataRegexp.FindStringSubmatch(string(body))
 
 	if len(matches) < 2 {
-		return resourceMap, fmt.Errorf("Failed to extract data")
+		return nil, fmt.Errorf("failed to extract data from data-props")
 	}
 
 	jsonString := html.UnescapeString(matches[1])
@@ -320,84 +320,84 @@ func extractResources(resp *http.Response) (map[string]map[string]interface{}, e
 
 	_, errPresent := jsonMap["error"]
 	if errPresent {
-		return resourceMap, errors.New("Error returned from Tesco")
+		return nil, errors.New("error returned from Tesco")
 	}
 
 	resourceMap, ok := jsonMap["resources"]
 	if !ok {
-		return resourceMap, errors.New("Unable to access resources")
+		return nil, errors.New("unable to access resources")
 	}
 
-	return resourceMap, nil
+	return &resourceMap, nil
 }
 
 // getCategory takes a tesco category page and returns the data
 // or an error for parameter, network or request failures
-func getCategory(url string) (string, error) {
-	var data string
+func getCategory(url string) (*string, error) {
+	// var data string
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return data, err
+		return nil, fmt.Errorf("request error: %v", err)
 	}
 	defer resp.Body.Close()
 
 	resources, err := extractResources(resp)
 	if err != nil {
-		return data, fmt.Errorf("getCategory: Unable to extract resources for url: %v", url)
+		return nil, fmt.Errorf("unable to extract resources: %v", err)
 	}
 
-	productsByCategory, ok := resources["productsByCategory"]
+	productsByCategory, ok := (*resources)["productsByCategory"]
 	if !ok {
-		return data, fmt.Errorf("getCategory: Unable to access productsByCategory for url: %v", url)
+		return nil, fmt.Errorf("unable to access productsByCategory: %v", err)
 	}
 
 	mappp.Pp(productsByCategory)
 
-	return "", nil
+	return nil, nil
 }
 
 // getProduct returns the product data
 // or an error for parameter, network or request failures
-func getProduct(id int64) (ProductData, error) {
+func getProduct(id int64) (*ProductData, error) {
 	var data ProductData
 
 	if id < 100000000 {
-		return data, fmt.Errorf(invalidProductIDf, id)
+		return nil, fmt.Errorf(invalidProductIDf, id)
 	}
 
 	productURL := fmt.Sprintf(productf, id)
 
 	resp, err := http.Get(productURL)
 	if err != nil {
-		return data, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	resources, err := extractResources(resp)
 	if err != nil {
-		return data, fmt.Errorf("getProduct: Unable to extract resources for pid: %v", id)
+		return nil, fmt.Errorf("unable to extract resources: %v", err)
 	}
 
-	productDetails, ok := resources["productDetails"]
+	productDetails, ok := (*resources)["productDetails"]
 	if !ok {
-		return data, fmt.Errorf("getProduct: Unable to access productDetails for pid: %v", id)
+		return nil, fmt.Errorf("unable to access product details for pid: %v", id)
 	}
 
 	dataMap, ok := productDetails["data"]
 	if !ok {
-		return data, fmt.Errorf("getProduct: Unable to access data for pid: %v", id)
+		return nil, fmt.Errorf("unable to access data for pid: %v", id)
 	}
 
 	dataStr, err := json.Marshal(dataMap)
 	if err != nil {
-		return data, fmt.Errorf("getProduct: Unable to marshal data to map for pid: %v", id)
+		return nil, fmt.Errorf("unable to marshal data to map: %v", err)
 	}
 
 	err = json.Unmarshal(dataStr, &data)
 	if err != nil {
-		return data, fmt.Errorf("getProduct: Unable to unmarshal to ProductData for pid: %v", id)
+		return nil, fmt.Errorf("unable to unmarshal to product data: %v", err)
 	}
 
-	return data, nil
+	return &data, nil
 }
