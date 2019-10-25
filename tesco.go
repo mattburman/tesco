@@ -2,6 +2,7 @@
 package main
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"html"
@@ -13,6 +14,7 @@ import (
 	"sort"
 	"sync"
 
+	_ "github.com/mattn/go-sqlite3"
 	"github.com/tidwall/gjson"
 	"github.com/urfave/cli"
 )
@@ -75,6 +77,20 @@ func main() {
 				url := c.String("url")
 				concurrency := c.Int("concurrency")
 
+				db, err := sql.Open("sqlite3", "./data.db")
+				if err != nil {
+					return fmt.Errorf("failed to open db: %v", err)
+				}
+				defer db.Close()
+				err = db.Ping()
+				if err != nil {
+					return fmt.Errorf("unable to connect to db: %v", err)
+				}
+				insertProduct, err := db.Prepare("INSERT INTO products(id, source) VALUES(?, 'tesco')")
+				if err != nil {
+					return fmt.Errorf("failed to create prepared statement for products: %v", err)
+				}
+
 				data, err := getCategory(url)
 				if err != nil {
 					return fmt.Errorf("failed to get category: %v", err)
@@ -87,15 +103,20 @@ func main() {
 				type task struct {
 					id int64
 				}
+				type result struct {
+					raw string
+					id  int64
+				}
 				tasks := make(chan task)
 				go func() {
 					for _, id := range *productIDs {
+						fmt.Println(id)
 						tasks <- task{id: id}
 					}
 					close(tasks)
 				}()
 
-				results := make(chan string)
+				results := make(chan result)
 				var wg sync.WaitGroup
 				wg.Add(concurrency)
 				go func() {
@@ -112,13 +133,34 @@ func main() {
 								fmt.Printf("could not get product data for %v: %v\n", t.id, err)
 								continue
 							}
-							results <- *product
+							results <- result{raw: *product, id: t.id}
 						}
 					}()
 				}
 
 				for r := range results {
-					fmt.Printf("r: %v\n", &r)
+					go func(reqResult result) {
+						res, err := insertProduct.Exec(reqResult.id)
+						if err != nil {
+							fmt.Printf("failed to execute query for %v: %v\n", reqResult.id, err)
+							return
+						}
+						rowCnt, err := res.RowsAffected()
+						if err != nil {
+							fmt.Printf("failed to get RowsAffected for attempted insertion of %v: %v\n", reqResult.id, err)
+							return
+						}
+						if rowCnt == 0 {
+							fmt.Printf("no insertion for %v", reqResult.id)
+							return
+						}
+						lastID, err := res.LastInsertId()
+						if err != nil {
+							fmt.Printf("failed to get LastInsertId for attempted insertion of %v: %v\n", reqResult.id, err)
+							return
+						}
+						fmt.Printf("inserted product %v\n", lastID)
+					}(r)
 				}
 				fmt.Printf("results: %v\n", results)
 
