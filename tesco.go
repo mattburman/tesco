@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"sync"
 
 	"github.com/tidwall/gjson"
 	"github.com/urfave/cli"
@@ -82,8 +83,44 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("failed to extract products from category")
 				}
-				fmt.Println(productIDs)
-				fmt.Println(concurrency)
+
+				type task struct {
+					id int64
+				}
+				tasks := make(chan task)
+				go func() {
+					for _, id := range *productIDs {
+						tasks <- task{id: id}
+					}
+					close(tasks)
+				}()
+
+				results := make(chan string)
+				var wg sync.WaitGroup
+				wg.Add(concurrency)
+				go func() {
+					wg.Wait()
+					close(results)
+				}()
+
+				for i := 0; i < concurrency; i++ {
+					go func() {
+						defer wg.Done()
+						for t := range tasks {
+							product, err := getProduct(t.id)
+							if err != nil {
+								fmt.Printf("could not get product data for %v: %v\n", t.id, err)
+								continue
+							}
+							results <- *product
+						}
+					}()
+				}
+
+				for r := range results {
+					fmt.Printf("r: %v\n", &r)
+				}
+				fmt.Printf("results: %v\n", results)
 
 				return nil
 			},
@@ -126,17 +163,19 @@ func extractResources(body string) (*string, error) {
 }
 
 // categoryToProductIDs takes a tesco category JSON string and returns extracted product IDs
-func categoryToProductIDs(category *string) (*[]string, error) {
+func categoryToProductIDs(category *string) (*[]int64, error) {
 	ids := gjson.Get(*category, "results.productItems.#.product.id")
 	if !ids.Exists() {
 		return nil, fmt.Errorf("unable to extract product ids from category")
 	}
 
 	idCount := gjson.Get(ids.String(), "#")
-	idSlice := make([]string, idCount.Int())
+	idSlice := make([]int64, idCount.Int())
 
+	i := 0
 	ids.ForEach(func(key, value gjson.Result) bool {
-		idSlice = append(idSlice, value.String())
+		idSlice[i] = value.Int()
+		i++
 		return true
 	})
 
