@@ -19,10 +19,11 @@ import (
 	"github.com/urfave/cli"
 )
 
-var productf string = "https://www.tesco.com/groceries/en-GB/products/%v"
-var dataRegexp *regexp.Regexp = regexp.MustCompile(`data-props="({.*})"`)
-
-var invalidProductIDf string = "%v is an invalid productID"
+var (
+	productf          string         = "https://www.tesco.com/groceries/en-GB/products/%v"
+	dataRegexp        *regexp.Regexp = regexp.MustCompile(`data-props="({.*})"`)
+	invalidProductIDf string         = "%v is an invalid productID"
+)
 
 func main() {
 	app := cli.NewApp()
