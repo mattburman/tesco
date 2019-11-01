@@ -12,6 +12,8 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -44,11 +46,7 @@ func main() {
 				},
 			},
 			Action: func(c *cli.Context) error {
-				pid := c.Int64("pid")
-				if pid < 100000000 {
-					return fmt.Errorf(invalidProductIDf, pid)
-				}
-
+				pid := c.String("pid")
 				data, err := getProduct(pid)
 				if err != nil {
 					return err
@@ -101,12 +99,18 @@ func main() {
 					return fmt.Errorf("failed to extract products from category")
 				}
 
+				existingProducts, err := getExistingProductIDs(db, productIDs)
+				if err != nil {
+					return fmt.Errorf("failed to get existing products from DB: %v", err)
+				}
+				fmt.Println("existingProducts: %v", existingProducts)
+
 				type task struct {
-					id int64
+					id string
 				}
 				type result struct {
 					raw string
-					id  int64
+					id  string
 				}
 				tasks := make(chan task)
 				go func() {
@@ -206,18 +210,18 @@ func extractResources(body string) (*string, error) {
 }
 
 // categoryToProductIDs takes a tesco category JSON string and returns extracted product IDs
-func categoryToProductIDs(category *string) (*[]int64, error) {
+func categoryToProductIDs(category *string) (*[]string, error) {
 	ids := gjson.Get(*category, "results.productItems.#.product.id")
 	if !ids.Exists() {
 		return nil, fmt.Errorf("unable to extract product ids from category")
 	}
 
 	idCount := gjson.Get(ids.String(), "#")
-	idSlice := make([]int64, idCount.Int())
+	idSlice := make([]string, idCount.Int())
 
 	i := 0
 	ids.ForEach(func(key, value gjson.Result) bool {
-		idSlice[i] = value.Int()
+		idSlice[i] = value.String()
 		i++
 		return true
 	})
@@ -254,8 +258,12 @@ func getCategory(url string) (*string, error) {
 
 // getProduct returns the product data
 // or an error for parameter, network or request failures
-func getProduct(id int64) (*string, error) {
-	if id < 100000000 {
+func getProduct(id string) (*string, error) {
+	idint, err := strconv.Atoi(id)
+	if err != nil {
+		return nil, fmt.Errorf("product ID was not an integer: %v", err)
+	}
+	if idint < 100000000 {
 		return nil, fmt.Errorf(invalidProductIDf, id)
 	}
 
@@ -284,4 +292,32 @@ func getProduct(id int64) (*string, error) {
 	s := data.String()
 
 	return &s, nil
+}
+
+// getExistingProductIDs returns the productIDs supplied that also exist in the DB
+func getExistingProductIDs(db *sql.DB, productIDs *[]string) (*[]string, error) {
+	numIDs := len(*productIDs)
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", numIDs), ",")
+	sql := fmt.Sprintf("SELECT id FROM products WHERE id IN(%v) AND source='tesco'", placeholders)
+
+	ids := make([]interface{}, numIDs)
+	for i := range ids {
+		ids[i] = (*productIDs)[i]
+	}
+	rows, err := db.Query(sql, ids...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get existing products from DB: %v", err)
+	}
+
+	var id string
+	existingProducts := make([]string, numIDs)
+	for i := 0; rows.Next(); i++ {
+		err := rows.Scan(&id)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, fmt.Sprintf("failed to scan line of product: %v", err))
+		}
+		existingProducts[i] = id
+	}
+
+	return &existingProducts, nil
 }
