@@ -85,7 +85,7 @@ func main() {
 				if err != nil {
 					return fmt.Errorf("unable to connect to db: %v", err)
 				}
-				insertProduct, err := db.Prepare("INSERT INTO products(id, source) VALUES(?, 'tesco')")
+				insertProduct, err := db.Prepare("INSERT INTO products(id, source, raw) VALUES(?, 'tesco', ?)")
 				if err != nil {
 					return fmt.Errorf("failed to create prepared statement for products: %v", err)
 				}
@@ -99,11 +99,11 @@ func main() {
 					return fmt.Errorf("failed to extract products from category")
 				}
 
-				existingProducts, err := getExistingProductIDs(db, productIDs)
+				unfetchedProductIDs, err := getUnfetchedProductIDs(db, productIDs)
 				if err != nil {
-					return fmt.Errorf("failed to get existing products from DB: %v", err)
+					return fmt.Errorf("failed to get unfetched products from DB: %v", err)
 				}
-				fmt.Println("existingProducts: %v", existingProducts)
+				fmt.Printf("unfetchedProductIDs: %v\n", unfetchedProductIDs)
 
 				type task struct {
 					id string
@@ -114,7 +114,7 @@ func main() {
 				}
 				tasks := make(chan task)
 				go func() {
-					for _, id := range *productIDs {
+					for _, id := range *unfetchedProductIDs {
 						fmt.Println(id)
 						tasks <- task{id: id}
 					}
@@ -145,7 +145,7 @@ func main() {
 
 				for r := range results {
 					go func(reqResult result) {
-						res, err := insertProduct.Exec(reqResult.id)
+						res, err := insertProduct.Exec(reqResult.id, reqResult.raw)
 						if err != nil {
 							fmt.Printf("failed to execute query for %v: %v\n", reqResult.id, err)
 							return
@@ -294,15 +294,15 @@ func getProduct(id string) (*string, error) {
 	return &s, nil
 }
 
-// getExistingProductIDs returns the productIDs supplied that also exist in the DB
-func getExistingProductIDs(db *sql.DB, productIDs *[]string) (*[]string, error) {
-	numIDs := len(*productIDs)
+// getUnfetchedProductIDs returns the productIDs supplied that do not exist in the DB
+func getUnfetchedProductIDs(db *sql.DB, toFetchProductIDs *[]string) (*[]string, error) {
+	numIDs := len(*toFetchProductIDs)
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", numIDs), ",")
 	sql := fmt.Sprintf("SELECT id FROM products WHERE id IN(%v) AND source='tesco'", placeholders)
 
 	ids := make([]interface{}, numIDs)
 	for i := range ids {
-		ids[i] = (*productIDs)[i]
+		ids[i] = (*toFetchProductIDs)[i]
 	}
 	rows, err := db.Query(sql, ids...)
 	if err != nil {
@@ -310,14 +310,25 @@ func getExistingProductIDs(db *sql.DB, productIDs *[]string) (*[]string, error) 
 	}
 
 	var id string
-	existingProducts := make([]string, numIDs)
-	for i := 0; rows.Next(); i++ {
+	existingProducts := make([]string, 0, numIDs)
+	for rows.Next() {
 		err := rows.Scan(&id)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, fmt.Sprintf("failed to scan line of product: %v", err))
 		}
-		existingProducts[i] = id
+		existingProducts = append(existingProducts, id)
 	}
 
-	return &existingProducts, nil
+	sort.Strings(existingProducts)
+	unfetchedIDs := make([]string, 0, numIDs)
+	for _, pid := range *toFetchProductIDs {
+		i := sort.SearchStrings(existingProducts, pid)
+		fmt.Println(i, len(existingProducts))
+		if i < len(existingProducts) && existingProducts[i] == pid { // product exists in db
+			continue
+		}
+		unfetchedIDs = append(unfetchedIDs, pid)
+	}
+
+	return &unfetchedIDs, nil
 }
