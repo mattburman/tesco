@@ -61,7 +61,7 @@ func main() {
 		{
 			Name:    "category",
 			Aliases: []string{"c"},
-			Usage:   "get category data by url",
+			Usage:   "get category data by url and store in products table with schema (id: Text, source: Text, raw: Text)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:     "url",
