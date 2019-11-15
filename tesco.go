@@ -139,12 +139,14 @@ func main() {
 								continue
 							}
 							results <- result{raw: *product, id: t.id}
+							wg.Add(1)
 						}
 					}()
 				}
 
 				for r := range results {
 					go func(reqResult result) {
+						defer wg.Done()
 						res, err := insertProduct.Exec(reqResult.id, reqResult.raw)
 						if err != nil {
 							fmt.Printf("failed to execute query for %v: %v\n", reqResult.id, err)
@@ -167,6 +169,7 @@ func main() {
 						fmt.Printf("inserted product %v\n", lastID)
 					}(r)
 				}
+
 				fmt.Printf("results: %v\n", results)
 
 				return nil
