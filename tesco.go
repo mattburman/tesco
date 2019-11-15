@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -24,6 +25,7 @@ import (
 var (
 	productf          string         = "https://www.tesco.com/groceries/en-GB/products/%v"
 	dataRegexp        *regexp.Regexp = regexp.MustCompile(`data-props="({.*})"`)
+	countRegexp				*regexp.Regexp = regexp.MustCompile(`count=\d+`)
 	invalidProductIDf string         = "%v is an invalid productID"
 )
 
@@ -75,6 +77,11 @@ func main() {
 			Action: func(c *cli.Context) error {
 				url := c.String("url")
 				concurrency := c.Int("concurrency")
+
+				url, err := AddCountToURL(url)
+				if err != nil {
+					return fmt.Errorf("unable to parse url: %v", err)
+				}
 
 				db, err := sql.Open("sqlite3", "./data.db")
 				if err != nil {
@@ -334,4 +341,17 @@ func getUnfetchedProductIDs(db *sql.DB, toFetchProductIDs *[]string) (*[]string,
 	}
 
 	return &unfetchedIDs, nil
+}
+
+// AddCountToURL returns the passed url with a count=48 query parameter
+func AddCountToURL(u string) (string, error) {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return "", fmt.Errorf("%v was not a valid URL: %v", u, err)
+	}
+	q := parsed.Query()
+	q.Set("count", "48")
+	parsed.RawQuery = q.Encode()
+	u = fmt.Sprint(parsed)
+	return u, nil
 }
