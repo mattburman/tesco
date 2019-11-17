@@ -29,9 +29,7 @@ var categoryCmd = &cobra.Command{
 		return nil
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println(concurrency)
 		url := args[0]
-		fmt.Println(url)
 
 		url, err := addCountToURL(url)
 		if err != nil {
@@ -77,7 +75,6 @@ var categoryCmd = &cobra.Command{
 		tasks := make(chan task)
 		go func() {
 			for _, id := range *unfetchedProductIDs {
-				fmt.Println(id)
 				tasks <- task{id: id}
 			}
 			close(tasks)
@@ -128,7 +125,7 @@ var categoryCmd = &cobra.Command{
 					fmt.Printf("failed to get LastInsertId for attempted insertion of %v: %v\n", reqResult.id, err)
 					return
 				}
-				fmt.Printf("inserted product %v\n", lastID)
+				fmt.Printf("inserted product: %v\n", lastID)
 			}(r)
 		}
 
@@ -167,7 +164,6 @@ func getUnfetchedProductIDs(db *sql.DB, toFetchProductIDs *[]string) (*[]string,
 	unfetchedIDs := make([]string, 0, numIDs)
 	for _, pid := range *toFetchProductIDs {
 		i := sort.SearchStrings(existingProducts, pid)
-		fmt.Println(i, len(existingProducts))
 		if i < len(existingProducts) && existingProducts[i] == pid { // product exists in db
 			continue
 		}
