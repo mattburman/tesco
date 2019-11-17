@@ -1,11 +1,11 @@
-package main
+package cmd
 
 import "testing"
 
 func TestAddCountToURL(t *testing.T) {
-	tables := []struct{
+	tables := []struct {
 		input string
-		want string
+		want  string
 	}{
 		{
 			"https://www.tesco.com/groceries/en-GB/shop/fresh-food/fresh-meat-and-poultry/fresh-beef/all",
@@ -22,10 +22,9 @@ func TestAddCountToURL(t *testing.T) {
 	}
 
 	for _, tc := range tables {
-		out, _ := AddCountToURL(tc.input)
+		out, _ := addCountToURL(tc.input)
 		if out != tc.want {
 			t.Errorf("count was not added correctly. got: %v, want: %v for url: %v", out, tc.want, tc.input)
 		}
 	}
 }
-
