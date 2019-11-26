@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/gjson"
 )
