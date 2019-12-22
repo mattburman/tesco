@@ -2,18 +2,12 @@ package cmd
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"os"
-	"sort"
-	"strings"
+	"github.com/mattburman/tesco/pkg/category"
+	"github.com/mattburman/tesco/pkg/product"
 	"sync"
 
 	"github.com/spf13/cobra"
-	"github.com/tidwall/gjson"
 )
 
 var concurrency int
@@ -30,11 +24,6 @@ var categoryCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		url := args[0]
 
-		url, err := addCountToURL(url)
-		if err != nil {
-			return fmt.Errorf("unable to parse url: %v", err)
-		}
-
 		db, err := sql.Open("sqlite3", "./data.db")
 		if err != nil {
 			return fmt.Errorf("failed to open db: %v", err)
@@ -44,21 +33,21 @@ var categoryCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("unable to connect to db: %v", err)
 		}
-		insertProduct, err := db.Prepare("INSERT INTO products(id, source, raw) VALUES(?, 'tesco', ?)")
+		insertProduct, err := db.Prepare("INSERT INTO products(id, source, raw) VALUES(?, 'product', ?)")
 		if err != nil {
 			return fmt.Errorf("failed to create prepared statement for products: %v", err)
 		}
 
-		data, err := getCategory(url)
+		data, err := category.Get(url)
 		if err != nil {
 			return fmt.Errorf("failed to get category: %v", err)
 		}
-		productIDs, err := categoryToProductIDs(data)
+		productIDs, err := category.ToProductIDs(data)
 		if err != nil {
 			return fmt.Errorf("failed to extract products from category")
 		}
 
-		unfetchedProductIDs, err := getUnfetchedProductIDs(db, productIDs)
+		unfetchedProductIDs, err := product.GetUnfetchedProductIDs(db, productIDs)
 		if err != nil {
 			return fmt.Errorf("failed to get unfetched products from DB: %v", err)
 		}
@@ -91,7 +80,7 @@ var categoryCmd = &cobra.Command{
 			go func() {
 				defer wg.Done()
 				for t := range tasks {
-					product, err := getProduct(t.id)
+					product, err := product.GetProduct(t.id)
 					if err != nil {
 						fmt.Printf("could not get product data for %v: %v\n", t.id, err)
 						continue
@@ -132,104 +121,6 @@ var categoryCmd = &cobra.Command{
 
 		return nil
 	},
-}
-
-// getUnfetchedProductIDs returns the productIDs supplied that do not exist in the DB
-func getUnfetchedProductIDs(db *sql.DB, toFetchProductIDs *[]string) (*[]string, error) {
-	numIDs := len(*toFetchProductIDs)
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", numIDs), ",")
-	sql := fmt.Sprintf("SELECT id FROM products WHERE id IN(%v) AND source='tesco'", placeholders)
-
-	ids := make([]interface{}, numIDs)
-	for i := range ids {
-		ids[i] = (*toFetchProductIDs)[i]
-	}
-	rows, err := db.Query(sql, ids...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get existing products from DB: %v", err)
-	}
-
-	var id string
-	existingProducts := make([]string, 0, numIDs)
-	for rows.Next() {
-		err := rows.Scan(&id)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, fmt.Sprintf("failed to scan line of product: %v", err))
-		}
-		existingProducts = append(existingProducts, id)
-	}
-
-	sort.Strings(existingProducts)
-	unfetchedIDs := make([]string, 0, numIDs)
-	for _, pid := range *toFetchProductIDs {
-		i := sort.SearchStrings(existingProducts, pid)
-		if i < len(existingProducts) && existingProducts[i] == pid { // product exists in db
-			continue
-		}
-		unfetchedIDs = append(unfetchedIDs, pid)
-	}
-
-	return &unfetchedIDs, nil
-}
-
-// getCategory takes a tesco category page and returns the data
-// or an error for parameter, network or request failures
-func getCategory(url string) (*string, error) {
-	resp, err := http.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("request error: %v", err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("request error: %v", err)
-	}
-
-	resources, err := extractResources(string(body))
-	if err != nil {
-		return nil, fmt.Errorf("unable to extract resources: %v", err)
-	}
-
-	data := gjson.Get(*resources, "productsByCategory.data|@pretty")
-	if !data.Exists() {
-		return nil, errors.New("unable to access products data in resources")
-	}
-	s := data.String()
-
-	return &s, nil
-}
-
-// categoryToProductIDs takes a tesco category JSON string and returns extracted product IDs
-func categoryToProductIDs(category *string) (*[]string, error) {
-	ids := gjson.Get(*category, "results.productItems.#.product.id")
-	if !ids.Exists() {
-		return nil, fmt.Errorf("unable to extract product ids from category")
-	}
-
-	idCount := gjson.Get(ids.String(), "#")
-	idSlice := make([]string, idCount.Int())
-
-	i := 0
-	ids.ForEach(func(key, value gjson.Result) bool {
-		idSlice[i] = value.String()
-		i++
-		return true
-	})
-
-	return &idSlice, nil
-}
-
-// addCountToURL returns the passed url with a count=48 query parameter
-func addCountToURL(u string) (string, error) {
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return "", fmt.Errorf("%v was not a valid URL: %v", u, err)
-	}
-	q := parsed.Query()
-	q.Set("count", "48")
-	parsed.RawQuery = q.Encode()
-	u = fmt.Sprint(parsed)
-	return u, nil
 }
 
 func init() {
