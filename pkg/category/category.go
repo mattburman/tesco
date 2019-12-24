@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gocolly/colly"
-	"github.com/mattburman/tesco/internal/category"
 	"github.com/mattburman/tesco/pkg/collecting"
 	"github.com/mattburman/tesco/pkg/product"
 	"github.com/tidwall/gjson"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 )
 
 type ProductResult struct {
@@ -23,7 +23,7 @@ type ProductResult struct {
 // Get takes a product category page and returns the data
 // or an error for parameter, network or request failures
 func Get(url string) (*string, error) {
-	url, err := category.AddCountToURL(url)
+	url, err := AddCountToURL(url)
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse url: %v", err)
 	}
@@ -52,8 +52,21 @@ func Get(url string) (*string, error) {
 	return &s, nil
 }
 
+// AddCountToURL returns the passed url with a count=48 query parameter
+func AddCountToURL(u string) (string, error) {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return "", fmt.Errorf("%v was not a valid URL: %v", u, err)
+	}
+	q := parsed.Query()
+	q.Set("count", "48")
+	parsed.RawQuery = q.Encode()
+	u = fmt.Sprint(parsed)
+	return u, nil
+}
+
 func Scrape(url string, concurrency int, productResults chan ProductResult, db *sql.DB) error {
-	url, err := category.AddCountToURL(url)
+	url, err := AddCountToURL(url)
 	if err != nil {
 		return fmt.Errorf("unable to parse url: %v", err)
 	}
