@@ -11,6 +11,16 @@ import (
 
 var cfgFile string
 
+/**
+cmd
+cmd get
+cmd get category # output category json
+cmd get product # output product json
+cmd scrape
+cmd scrape category # scrape products from category, output whatever
+cmd scrape product # scrape product
+ */
+
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
 	Use:   "product",

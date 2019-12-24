@@ -119,3 +119,14 @@ func GetUnfetchedProductIDs(db *sql.DB, toFetchProductIDs *[]string) (*[]string,
 	return &unfetchedIDs, nil
 }
 
+var urlRegex *regexp.Regexp = regexp.MustCompile(`https://www.tesco.com/groceries/en-GB/products/(?P<ID>\d+)`)
+
+// URLToID extracts the ID from a product URL
+func URLToID(url string) (string, error) {
+	match := urlRegex.FindSubmatch([]byte(url))
+	if len(match) == 0 {
+		return "", fmt.Errorf("could not extract id from url: %v", url)
+	}
+	return string(match[1]), nil
+}
+

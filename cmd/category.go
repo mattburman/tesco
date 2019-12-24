@@ -4,9 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/mattburman/tesco/pkg/category"
-	"github.com/mattburman/tesco/pkg/product"
-	"sync"
-
 	"github.com/spf13/cobra"
 )
 
@@ -24,6 +21,7 @@ var categoryCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		url := args[0]
 
+		// set up db
 		db, err := sql.Open("sqlite3", "./data.db")
 		if err != nil {
 			return fmt.Errorf("failed to open db: %v", err)
@@ -35,89 +33,47 @@ var categoryCmd = &cobra.Command{
 		}
 		insertProduct, err := db.Prepare("INSERT INTO products(id, source, raw) VALUES(?, 'product', ?)")
 		if err != nil {
-			return fmt.Errorf("failed to create prepared statement for products: %v", err)
+			return fmt.Errorf("failed to create prepared statement for productResults: %v", err)
 		}
 
-		data, err := category.Get(url)
-		if err != nil {
-			return fmt.Errorf("failed to get category: %v", err)
-		}
-		productIDs, err := category.ToProductIDs(data)
-		if err != nil {
-			return fmt.Errorf("failed to extract products from category")
-		}
 
-		unfetchedProductIDs, err := product.GetUnfetchedProductIDs(db, productIDs)
-		if err != nil {
-			return fmt.Errorf("failed to get unfetched products from DB: %v", err)
-		}
-		fmt.Printf("unfetchedProductIDs: %v\n", unfetchedProductIDs)
+		// the channel we will receive products on
+		productResults := make(chan category.ProductResult)
 
-		type task struct {
-			id string
-		}
-		type result struct {
-			raw string
-			id  string
-		}
-		tasks := make(chan task)
-		go func() {
-			for _, id := range *unfetchedProductIDs {
-				tasks <- task{id: id}
-			}
-			close(tasks)
-		}()
-
-		results := make(chan result)
-		var wg sync.WaitGroup
-		wg.Add(concurrency)
-		go func() {
-			wg.Wait()
-			close(results)
-		}()
-
-		for i := 0; i < concurrency; i++ {
+		// start some insertion workers that take insertion jobs from the channel
+		for i := 1; i<=8; i++ {
 			go func() {
-				defer wg.Done()
-				for t := range tasks {
-					product, err := product.GetProduct(t.id)
+				for reqResult := range productResults {
+					fmt.Println(reqResult.Id)
+					res, err := insertProduct.Exec(reqResult.Id, reqResult.Json)
 					if err != nil {
-						fmt.Printf("could not get product data for %v: %v\n", t.id, err)
+						fmt.Printf("failed to execute query for %v: %v\n", reqResult.Id, err)
 						continue
 					}
-					results <- result{raw: *product, id: t.id}
-					wg.Add(1)
+					rowCnt, err := res.RowsAffected()
+					if err != nil {
+						fmt.Printf("failed to get RowsAffected for attempted insertion of %v: %v\n", reqResult.Id, err)
+						continue
+					}
+					if rowCnt == 0 {
+						fmt.Printf("no insertion for %v", reqResult.Id)
+						continue
+					}
+					lastID, err := res.LastInsertId()
+					if err != nil {
+						fmt.Printf("failed to get LastInsertId for attempted insertion of %v: %v\n", reqResult.Id, err)
+						continue
+					}
+					fmt.Printf("inserted product: %v\n", lastID)
 				}
 			}()
 		}
 
-		for r := range results {
-			go func(reqResult result) {
-				defer wg.Done()
-				res, err := insertProduct.Exec(reqResult.id, reqResult.raw)
-				if err != nil {
-					fmt.Printf("failed to execute query for %v: %v\n", reqResult.id, err)
-					return
-				}
-				rowCnt, err := res.RowsAffected()
-				if err != nil {
-					fmt.Printf("failed to get RowsAffected for attempted insertion of %v: %v\n", reqResult.id, err)
-					return
-				}
-				if rowCnt == 0 {
-					fmt.Printf("no insertion for %v", reqResult.id)
-					return
-				}
-				lastID, err := res.LastInsertId()
-				if err != nil {
-					fmt.Printf("failed to get LastInsertId for attempted insertion of %v: %v\n", reqResult.id, err)
-					return
-				}
-				fmt.Printf("inserted product: %v\n", lastID)
-			}(r)
+		// scrape the category to place products on the productResults channel
+		err = category.Scrape(url, concurrency, productResults, db)
+		if err != nil {
+			return fmt.Errorf("failed to scrape productResults: %v", err)
 		}
-
-		fmt.Printf("results: %v\n", results)
 
 		return nil
 	},
