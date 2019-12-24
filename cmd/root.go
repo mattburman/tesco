@@ -11,20 +11,10 @@ import (
 
 var cfgFile string
 
-/**
-cmd
-cmd get
-cmd get category # output category json
-cmd get product # output product json
-cmd scrape
-cmd scrape category # scrape products from category, output whatever
-cmd scrape product # scrape product
- */
-
 // RootCmd represents the base command when called without any subcommands
 var RootCmd = &cobra.Command{
-	Use:   "product",
-	Short: "scrape the product site",
+	Use:   "tesco",
+	Short: "Interact with Tesco",
 	Long: `Tesco is a CLI for accessing macronutrient data on product.
   Get a single product to stdout, or scrape and persist an entire category of food.
   `,

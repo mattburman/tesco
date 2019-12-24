@@ -6,8 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var concurrency int
-
 var categoryCmd = &cobra.Command{
 	Use:   "category <url>",
 	Short: "scrape category by URL and persist to data.db",
@@ -28,6 +26,5 @@ var categoryCmd = &cobra.Command{
 }
 
 func init() {
-	categoryCmd.Flags().IntVar(&concurrency, "concurrency", 3, "number of simultaneous requests")
-	RootCmd.AddCommand(categoryCmd)
+	ScrapeCmd.AddCommand(categoryCmd)
 }
