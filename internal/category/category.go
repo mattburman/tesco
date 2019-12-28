@@ -7,6 +7,8 @@ import (
 	"github.com/mattburman/tesco/pkg/category"
 )
 
+var Get = category.Get
+
 // ScrapeToSqlite scrapes the products in a category URL to sqlite3
 func ScrapeToSqlite(url string, concurrency int) error {
 	// set up db
