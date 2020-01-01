@@ -30,7 +30,7 @@ func ScrapeToSqlite(url string, concurrency int) error {
 	productResults := make(chan category.ProductResult)
 
 	// start some insertion workers that take insertion jobs from the channel
-	for i := 1; i<=8; i++ {
+	for i := 1; i <= 8; i++ {
 		go func() {
 			for reqResult := range productResults {
 				fmt.Println(reqResult.Id)
@@ -66,4 +66,3 @@ func ScrapeToSqlite(url string, concurrency int) error {
 
 	return nil
 }
-

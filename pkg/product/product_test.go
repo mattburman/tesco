@@ -116,9 +116,6 @@ func TestNewProduct(t *testing.T) {
 			if diff := pretty.Compare(got, tt.want); diff != "" {
 				t.Errorf("%s: post-AddCrew diff: (-got +want)\n%s", tt.name, diff)
 			}
-			//if !reflect.DeepEqual(got, tt.want) {
-			//	t.Errorf("NewProduct()\ngot = %v\nwant %v", got, tt.want)
-			//}
 		})
 	}
 }

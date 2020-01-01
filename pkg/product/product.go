@@ -52,6 +52,7 @@ type Product struct {
 	perServing                      Macros
 }
 
+// NewProduct constructs a Product from a raw tesco json response string
 func NewProduct(raw string, url string) (*Product, error) {
 	results := gjson.GetMany(
 		raw,
@@ -79,16 +80,6 @@ func NewProduct(raw string, url string) (*Product, error) {
 	h := sha1.New()
 	h.Write([]byte(raw))
 	hashOfRawValueLastUsedToCompute := fmt.Sprintf("%x", h.Sum(nil))
-
-	//json.product.details.nutritionInfo[0].name = "Typical Values";
-	//json.product.details.nutritionInfo[1].name = "Energy";
-	//json.product.details.nutritionInfo[2].name = "Fat";
-	//json.product.details.nutritionInfo[3].name = "Saturates";
-	//json.product.details.nutritionInfo[4].name = "Carbohydrate";
-	//json.product.details.nutritionInfo[5].name = "Sugars";
-	//json.product.details.nutritionInfo[6].name = "Fibre";
-	//json.product.details.nutritionInfo[7].name = "Protein";
-	//json.product.details.nutritionInfo[8].name = "Salt";
 
 	nutrientNames := results[2].Array()
 	nutrientPerComps := results[3].Array()
@@ -165,8 +156,6 @@ func NewProduct(raw string, url string) (*Product, error) {
 		perServing:                      perServing,
 	}
 
-	fmt.Println(product)
-	fmt.Println(product.description)
 	return &product, nil
 }
 

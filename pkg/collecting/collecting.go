@@ -23,4 +23,3 @@ func ExtractResources(dataProps string) (*string, error) {
 
 	return &resources, nil
 }
-

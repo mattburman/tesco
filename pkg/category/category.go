@@ -146,4 +146,3 @@ func ToProductIDs(category *string) (*[]string, error) {
 
 	return &idSlice, nil
 }
-
